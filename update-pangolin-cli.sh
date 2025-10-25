@@ -21,7 +21,7 @@ Options:
   --down/--no-down           Exécuter (ou non) docker compose down (défaut: --down)
   --pull/--no-pull           Exécuter (ou non) docker compose pull (défaut: --pull)
   --up/--no-up               Exécuter (ou non) docker compose up -d (défaut: --up)
-  --auto-discover            Tenter de découvrir automatiquement les chemins (compose/config/traefik)
+  --auto-discover            Tenter de découvrir automatiquement les chemins (compose/config/traefik) [activé par défaut]
   --search-root PATH         Racine de recherche pour --auto-discover (par défaut: racines communes)
   --self-install             Installer automatiquement ce script dans /opt/pangolin (ou --install-path)
   --install-path PATH        Dossier cible pour --self-install (défaut: /opt/pangolin)
@@ -80,7 +80,7 @@ DO_DOWN=true
 DO_PULL=true
 DO_UP=true
 ASSUME_YES=false
-AUTO_DISCOVER=false
+AUTO_DISCOVER=true
 SEARCH_ROOT=""
 SELF_INSTALL=false
 INSTALL_PATH="/opt/pangolin"
