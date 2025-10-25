@@ -302,7 +302,7 @@ fi
 # Auto-discovery si demandé
 if [[ "$AUTO_DISCOVER" == true ]]; then
   discover_paths
-}
+fi
 
 # Renseigner les valeurs manquantes
 prompt_if_empty COMPOSE_PATH "Chemin docker-compose.yml: "
