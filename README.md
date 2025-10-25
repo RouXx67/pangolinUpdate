@@ -13,23 +13,11 @@ Référence officielle:
 - Docker Compose v2 (`docker compose`) ou v1 (`docker-compose`)
 - Accès aux fichiers: `docker-compose.yml`, et le dossier de configuration de Pangolin (le fichier `traefik_config.yml` est nécessaire uniquement si vous mettez à jour Badger)
 - Droits suffisants pour arrêter/démarrer les services Docker
+- Outil `curl` installé (utilisé pour récupérer automatiquement les dernières versions stables depuis Docker Hub)
 
 ## Installation
 
-Option A — Installation rapide avec wget:
-```bash
-wget -O /opt/pangolin/update-pangolin-cli.sh https://raw.githubusercontent.com/RouXx67/pangolinUpdate/main/update-pangolin-cli.sh
-chmod +x /opt/pangolin/update-pangolin-cli.sh
-```
-
-Option B — Copie manuelle:
-1. Copier le script sur votre serveur (ex: `/opt/pangolin/update-pangolin-cli.sh`).
-2. Rendre le script exécutable:
-   ```bash
-   chmod +x /opt/pangolin/update-pangolin-cli.sh
-   ```
-
-Option C — Installation automatique via le script:
+Installation automatique via le script:
 - Télécharger temporairement le script et lancer l'auto-installation dans le dossier par défaut (`/opt/pangolin`):
   ```bash
   sudo wget -O /tmp/update-pangolin-cli.sh https://raw.githubusercontent.com/RouXx67/pangolinUpdate/main/update-pangolin-cli.sh \
@@ -48,38 +36,36 @@ Option C — Installation automatique via le script:
 
 Une fois installé, lancez le script depuis son emplacement:
 ```bash
-sudo /opt/pangolin/update-pangolin-cli.sh --auto-discover --backup-root /srv/backups
+sudo /opt/pangolin/update-pangolin-cli.sh
+# Par défaut: auto-découverte activée, sauvegarde dans le dossier du docker-compose,
+# propositions des dernières versions stables (Entrée pour accepter). Utilisez -y pour tout accepter automatiquement:
+sudo /opt/pangolin/update-pangolin-cli.sh -y
 ```
 
 ## Utilisation
 
 ### Auto-découverte (recommandé)
-Le script peut automatiquement rechercher vos fichiers Pangolin sur le système :
+L’auto-découverte est activée par défaut; le script recherche automatiquement vos fichiers Pangolin sur le système :
 
 ```bash
-# Auto-découverte complète (sans mise à jour Badger)
-./update-pangolin-cli.sh --auto-discover --backup-root /srv/backups \
-  --pangolin-version 1.7.3 --gerbil-version 1.2.1 --traefik-version v3.4.0
+# Exécution par défaut (sans mise à jour Badger)
+./update-pangolin-cli.sh
+
+# Mode non-interactif (accepte automatiquement les chemins trouvés et les dernières versions stables)
+./update-pangolin-cli.sh -y
 
 # Auto-découverte dans un dossier spécifique
-./update-pangolin-cli.sh --auto-discover --search-root /srv/pangolin --backup-root /srv/backups
-
-# Mode non-interactif (prend automatiquement le premier résultat trouvé)
-./update-pangolin-cli.sh --auto-discover -y --backup-root /srv/backups \
-  --pangolin-version 1.7.3 --gerbil-version 1.2.1 --traefik-version v3.4.0
+./update-pangolin-cli.sh --search-root /srv/pangolin
 ```
 
 #### Scénarios d’utilisation: avec ou sans mise à jour Badger
 - Sans mise à jour Badger (traefik_config.yml optionnel, ignoré si absent):
 ```bash
-./update-pangolin-cli.sh --auto-discover --backup-root /srv/backups \
-  --pangolin-version 1.7.3 --gerbil-version 1.2.1 --traefik-version v3.4.0
+./update-pangolin-cli.sh -y
 ```
 - Avec mise à jour Badger (nécessite le chemin vers traefik_config.yml):
 ```bash
-./update-pangolin-cli.sh --auto-discover --backup-root /srv/backups \
-  --pangolin-version 1.7.3 --gerbil-version 1.2.1 --traefik-version v3.4.0 \
-  --badger-version v1.2.0 --traefik-config /srv/pangolin/config/traefik/traefik_config.yml
+./update-pangolin-cli.sh -y --badger-version v1.2.0 --traefik-config /srv/pangolin/config/traefik/traefik_config.yml
 ```
 
 ### Configuration manuelle
@@ -89,32 +75,34 @@ Exemple de commande complète avec chemins spécifiés manuellement :
   --compose /srv/pangolin/docker-compose.yml \
   --traefik-config /srv/pangolin/config/traefik/traefik_config.yml \
   --config-dir /srv/pangolin/config \
-  --backup-root /srv/backups \
   --pangolin-version 1.7.3 \
   --gerbil-version 1.2.1 \
   --traefik-version v3.4.0 \
   --badger-version v1.2.0
 ```
+Note: sans `--backup-root`, la sauvegarde est créée dans le même dossier que `docker-compose.yml`.
 
 Si vous omettez des options, le script vous les demandera en ligne de commande (utilisez `-y`/`--assume-yes` pour éviter les questions et utiliser uniquement les valeurs fournies).
+
+Par défaut, le script propose les dernières versions stables détectées automatiquement via Docker Hub; appuyez sur Entrée pour les accepter.
 
 ### Options disponibles
 - `--compose PATH`             Chemin vers `docker-compose.yml`
 - `--traefik-config PATH`      Chemin vers `traefik_config.yml` (optionnel; requis uniquement avec `--badger-version`)
 - `--config-dir PATH`          Dossier de configuration à sauvegarder
-- `--backup-root PATH`         Dossier de destination pour la sauvegarde
+- `--backup-root PATH`         Dossier de destination pour la sauvegarde (par défaut: dossier de `docker-compose.yml`)
 - `--pangolin-version VER`     Version d'image Pangolin (ex: `1.7.3`)
 - `--gerbil-version VER`       Version d'image Gerbil (ex: `1.2.1`)
 - `--traefik-version VER`      Version d'image Traefik (ex: `v3.4.0`)
 - `--badger-version VER`       Version du plugin Badger (ex: `v1.2.0`)
-- `--auto-discover`            Rechercher automatiquement les fichiers Pangolin
+- `--auto-discover`            Rechercher automatiquement les fichiers Pangolin (activé par défaut)
 - `--search-root PATH`         Racine de recherche pour `--auto-discover` (par défaut: `/srv`, `/opt`, `/var`, `/etc`, `/home/*`, `/root`)
 - `--self-install`             Installer automatiquement le script dans le dossier cible
 - `--install-path PATH`        Dossier cible pour `--self-install` (défaut: `/opt/pangolin`)
 - `--down` / `--no-down`       Exécuter (ou non) `docker compose down` (défaut: `--down`)
 - `--pull` / `--no-pull`       Exécuter (ou non) `docker compose pull` (défaut: `--pull`)
 - `--up` / `--no-up`           Exécuter (ou non) `docker compose up -d` (défaut: `--up`)
-- `-y`, `--assume-yes`         Ne pas poser de questions; utiliser les valeurs fournies
+- `-y`, `--assume-yes`         Ne pas poser de questions; utiliser les valeurs fournies (y compris les dernières versions stables proposées)
 - `-h`, `--help`               Afficher l'aide
 
 ### Comment fonctionne l'auto-découverte
@@ -143,6 +131,4 @@ Pour plus d'informations et recommandations détaillées, consultez la documenta
 - Chemins invalides: assurez-vous que `docker-compose.yml` et le dossier de configuration existent; `traefik_config.yml` n'est requis que si vous mettez à jour Badger.
 - Mise à jour Badger ignorée: si `--badger-version` est fourni mais `traefik_config.yml` est introuvable, le script journalise l'ignorance et poursuit les autres opérations.
 - Auto-découverte ne trouve rien: utilisez `--search-root` pour spécifier le dossier racine où chercher, ou spécifiez les chemins manuellement.
-
-## Licence
-Ce script est fourni « tel quel ». Adaptez-le selon votre environnement et vos besoins.
+- Récupération des versions impossible (API Docker Hub indisponible): le script bascule sur le tag `latest`.

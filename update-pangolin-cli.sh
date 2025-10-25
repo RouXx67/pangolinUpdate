@@ -168,19 +168,23 @@ require_path() {
   fi
 }
 
+# ... existing code ...
+# Préparer un descripteur qui pointe vers stdout terminal (avant tee)
+exec 3>&1
 choose_from_list() {
-  # $1: name, $2..: items
   local name="$1"; shift
   local items=("$@")
   if [[ ${#items[@]} -eq 0 ]]; then echo ""; return 0; fi
   if [[ "$ASSUME_YES" == true ]]; then echo "${items[0]}"; return 0; fi
-  echo "Plusieurs candidats pour $name :"
+  >&3 echo "Plusieurs candidats pour $name :"
   local i=1
   for it in "${items[@]}"; do
-    echo "  [$i] $it"
+    >&3 echo "  [$i] $it"
     ((i++))
   done
-  read -r -p "Choisissez [1-${#items[@]}] (défaut 1): " sel
+  >&3 printf "Choisissez [1-%d] (défaut 1): " "${#items[@]}"
+  local sel
+  read -r sel < /dev/tty
   if [[ -z "$sel" ]]; then sel=1; fi
   if ! [[ "$sel" =~ ^[0-9]+$ ]] || [[ "$sel" -lt 1 ]] || [[ "$sel" -gt ${#items[@]} ]]; then sel=1; fi
   echo "${items[$((sel-1))]}"
@@ -330,6 +334,7 @@ compose_run() {
 # Auto-installation si demandée
 if [[ "$SELF_INSTALL" == true ]]; then
   self_install
+  exit 0
 fi
 
 # Auto-discovery si demandé
