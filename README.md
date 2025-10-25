@@ -29,6 +29,28 @@ Option B — Copie manuelle:
    chmod +x /opt/pangolin/update-pangolin-cli.sh
    ```
 
+Option C — Installation automatique via le script:
+- Télécharger temporairement le script et lancer l'auto-installation dans le dossier par défaut (`/opt/pangolin`):
+  ```bash
+  sudo wget -O /tmp/update-pangolin-cli.sh https://raw.githubusercontent.com/RouXx67/pangolinUpdate/main/update-pangolin-cli.sh \
+    && sudo bash /tmp/update-pangolin-cli.sh --self-install
+  ```
+- Installer dans un dossier personnalisé (ex: `/srv/pangolin`):
+  ```bash
+  sudo wget -O /tmp/update-pangolin-cli.sh https://raw.githubusercontent.com/RouXx67/pangolinUpdate/main/update-pangolin-cli.sh \
+    && sudo bash /tmp/update-pangolin-cli.sh --self-install --install-path /srv/pangolin
+  ```
+- Alternative avec curl:
+  ```bash
+  curl -fsSL https://raw.githubusercontent.com/RouXx67/pangolinUpdate/main/update-pangolin-cli.sh -o /tmp/update-pangolin-cli.sh \
+    && sudo bash /tmp/update-pangolin-cli.sh --self-install
+  ```
+
+Une fois installé, lancez le script depuis son emplacement:
+```bash
+sudo /opt/pangolin/update-pangolin-cli.sh --auto-discover --backup-root /srv/backups
+```
+
 ## Utilisation
 
 ### Auto-découverte (recommandé)
@@ -73,6 +95,8 @@ Si vous omettez des options, le script vous les demandera en ligne de commande (
 - `--badger-version VER`       Version du plugin Badger (ex: `v1.2.0`)
 - `--auto-discover`            Rechercher automatiquement les fichiers Pangolin
 - `--search-root PATH`         Racine de recherche pour `--auto-discover` (par défaut: `/srv`, `/opt`, `/var`, `/etc`, `/home/*`, `/root`)
+- `--self-install`             Installer automatiquement le script dans le dossier cible
+- `--install-path PATH`        Dossier cible pour `--self-install` (défaut: `/opt/pangolin`)
 - `--down` / `--no-down`       Exécuter (ou non) `docker compose down` (défaut: `--down`)
 - `--pull` / `--no-pull`       Exécuter (ou non) `docker compose pull` (défaut: `--pull`)
 - `--up` / `--no-up`           Exécuter (ou non) `docker compose up -d` (défaut: `--up`)
@@ -101,7 +125,7 @@ Pour plus d'informations et recommandations détaillées, consultez la documenta
 
 ## Dépannage
 - `docker compose` introuvable: installez Docker Compose v2 ou utilisez `docker-compose` v1.
-- Droits insuffisants: exécutez le script avec un utilisateur ayant accès à Docker.
+- Droits insuffisants: exécutez le script avec un utilisateur ayant accès à Docker (et `sudo` pour l'installation dans un dossier protégé comme `/opt`).
 - Chemins invalides: assurez-vous que `docker-compose.yml`, `traefik_config.yml` et le dossier de configuration existent et sont accessibles.
 - Auto-découverte ne trouve rien: utilisez `--search-root` pour spécifier le dossier racine où chercher, ou spécifiez les chemins manuellement.
 

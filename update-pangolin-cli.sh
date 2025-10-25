@@ -23,6 +23,8 @@ Options:
   --up/--no-up               Exécuter (ou non) docker compose up -d (défaut: --up)
   --auto-discover            Tenter de découvrir automatiquement les chemins (compose/config/traefik)
   --search-root PATH         Racine de recherche pour --auto-discover (par défaut: racines communes)
+  --self-install             Installer automatiquement ce script dans /opt/pangolin (ou --install-path)
+  --install-path PATH        Dossier cible pour --self-install (défaut: /opt/pangolin)
   -y, --assume-yes           Ne pas poser de questions, utiliser les valeurs fournies
   -h, --help                 Afficher cette aide
 
@@ -35,6 +37,11 @@ Exemples:
     --pangolin-version 1.7.3 --gerbil-version 1.2.1 --traefik-version v3.4.0 --badger-version v1.2.0
 
   ./update-pangolin-cli.sh --auto-discover --backup-root /srv/backups
+
+  # Installation automatique dans /opt/pangolin
+  ./update-pangolin-cli.sh --self-install
+  # Installation automatique dans un dossier spécifique
+  ./update-pangolin-cli.sh --self-install --install-path /srv/pangolin
 EOF
 }
 
@@ -74,6 +81,8 @@ DO_UP=true
 ASSUME_YES=false
 AUTO_DISCOVER=false
 SEARCH_ROOT=""
+SELF_INSTALL=false
+INSTALL_PATH="/opt/pangolin"
 
 # Parse args
 while [[ $# -gt 0 ]]; do
@@ -94,6 +103,8 @@ while [[ $# -gt 0 ]]; do
     --no-up) DO_UP=false; shift;;
     --auto-discover) AUTO_DISCOVER=true; shift;;
     --search-root) SEARCH_ROOT="$2"; shift 2;;
+    --self-install) SELF_INSTALL=true; shift;;
+    --install-path) INSTALL_PATH="$2"; shift 2;;
     -y|--assume-yes) ASSUME_YES=true; shift;;
     -h|--help) usage; exit 0;;
     *) echo "Option inconnue: $1" >&2; usage; exit 1;;
@@ -140,6 +151,25 @@ choose_from_list() {
   if [[ -z "$sel" ]]; then sel=1; fi
   if ! [[ "$sel" =~ ^[0-9]+$ ]] || [[ "$sel" -lt 1 ]] || [[ "$sel" -gt ${#items[@]} ]]; then sel=1; fi
   echo "${items[$((sel-1))]}"
+}
+
+self_install() {
+  local dst_root="$INSTALL_PATH"
+  local dst_path="${dst_root%/}/update-pangolin-cli.sh"
+  log "Installation automatique du script dans: $dst_root"
+  if ! mkdir -p "$dst_root"; then
+    echo "Impossible de créer le dossier $dst_root (permissions?). Réessayez avec sudo." >&2
+    exit 1
+  fi
+  if ! cp "$0" "$dst_path"; then
+    echo "Impossible de copier le script vers $dst_path (permissions?)." >&2
+    exit 1
+  fi
+  if ! chmod +x "$dst_path"; then
+    echo "Impossible de rendre le script exécutable à $dst_path (permissions?)." >&2
+    exit 1
+  fi
+  log "Script installé: $dst_path"
 }
 
 discover_paths() {
@@ -264,10 +294,15 @@ compose_run() {
   (cd "$dir" && ${DOCKER_COMPOSE_BIN} "$@")
 }
 
+# Auto-installation si demandée
+if [[ "$SELF_INSTALL" == true ]]; then
+  self_install
+fi
+
 # Auto-discovery si demandé
 if [[ "$AUTO_DISCOVER" == true ]]; then
   discover_paths
-fi
+}
 
 # Renseigner les valeurs manquantes
 prompt_if_empty COMPOSE_PATH "Chemin docker-compose.yml: "
