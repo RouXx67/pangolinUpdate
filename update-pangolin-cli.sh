@@ -54,6 +54,7 @@ need_cmd() {
 }
 
 need_cmd docker
+need_cmd curl
 
 # Détecter docker compose
 DOCKER_COMPOSE_BIN=""
@@ -128,6 +129,38 @@ prompt_if_empty() {
   fi
 }
 
+# Nouvelle fonction: invite avec valeur par défaut
+prompt_with_default() {
+  local varname="$1"; local prompt="$2"; local def="$3"
+  local current_value
+  current_value=$(eval echo "\${$varname}")
+  if [[ -z "$current_value" ]]; then
+    if [[ "$ASSUME_YES" == true ]]; then
+      eval "$varname=\"$def\""
+    else
+      local input
+      read -r -p "$prompt $def " input
+      if [[ -z "$input" ]]; then input="$def"; fi
+      eval "$varname=\"$input\""
+    fi
+  fi
+}
+
+# Récupération dynamique des dernières versions depuis Docker Hub (fallback 'latest' si indisponible)
+latest_tag_from_hub() {
+  local repo="$1"; local pattern="$2"
+  local url="https://hub.docker.com/v2/repositories/${repo}/tags?page_size=100"
+  local json tags tag
+  json=$(curl -fsSL "$url" 2>/dev/null || true)
+  tags=$(echo "$json" | grep -o '"name":"[^"]*"' | sed 's/\"name\":\"//;s/\"$//' | grep -E "$pattern" | grep -Ev '(rc|beta|alpha)' | sort -V -r)
+  tag=$(echo "$tags" | head -n 1)
+  if [[ -z "$tag" ]]; then echo "latest"; else echo "$tag"; fi
+}
+
+get_latest_pangolin() { latest_tag_from_hub "fosrl/pangolin" '^[0-9]+\.[0-9]+\.[0-9]+$'; }
+get_latest_gerbil()   { latest_tag_from_hub "fosrl/gerbil"   '^[0-9]+\.[0-9]+\.[0-9]+$'; }
+# Traefik officiel est sous 'library/traefik'
+get_latest_traefik()  { latest_tag_from_hub "library/traefik" '^(v)?[0-9]+\.[0-9]+\.[0-9]+$'; }
 require_path() {
   local p="$1"; local desc="$2"
   if [[ -z "$p" ]]; then
@@ -311,20 +344,33 @@ if [[ -n "$BADGER_VER" ]]; then
   prompt_if_empty TRAEFIK_CONFIG_PATH "Chemin traefik_config.yml (pour Badger): "
 fi
 prompt_if_empty CONFIG_DIR "Dossier de configuration à sauvegarder: "
-prompt_if_empty BACKUP_ROOT "Dossier de destination pour la sauvegarde: "
-prompt_if_empty PANGOLIN_VER "Version Pangolin (ex: 1.7.3): "
-prompt_if_empty GERBIL_VER "Version Gerbil (ex: 1.2.1): "
-prompt_if_empty TRAEFIK_VER "Version Traefik (ex: v3.4.0): "
-# prompt_if_empty BADGER_VER "Version Badger (ex: v1.2.0): "
+# Ne pas demander BACKUP_ROOT: utiliser le dossier du docker-compose
+# prompt_if_empty BACKUP_ROOT "Dossier de destination pour la sauvegarde: "
+
+# Déterminer dynamiquement les valeurs par défaut des versions
+DEFAULT_PANGOLIN_VER="$(get_latest_pangolin)"
+DEFAULT_GERBIL_VER="$(get_latest_gerbil)"
+DEFAULT_TRAEFIK_VER="$(get_latest_traefik)"
+
+# Invites avec valeur par défaut dynamiques (Entrée = dernière version)
+prompt_with_default PANGOLIN_VER "Version Pangolin (défaut: ${DEFAULT_PANGOLIN_VER}):" "$DEFAULT_PANGOLIN_VER"
+prompt_with_default GERBIL_VER   "Version Gerbil (défaut: ${DEFAULT_GERBIL_VER}):" "$DEFAULT_GERBIL_VER"
+prompt_with_default TRAEFIK_VER  "Version Traefik (défaut: ${DEFAULT_TRAEFIK_VER}):" "$DEFAULT_TRAEFIK_VER"
+# prompt_with_default BADGER_VER "Version Badger (ex: v1.2.0):" "v1.2.0"
 
 # Validation
 require_path "$COMPOSE_PATH" "docker-compose.yml"
 # TRAEFIK_CONFIG_PATH optionnel: seulement si BADGER_VER fourni
 # if [[ -n "$BADGER_VER" ]]; then require_path "$TRAEFIK_CONFIG_PATH" "traefik_config.yml"; fi
 require_path "$CONFIG_DIR" "Dossier de configuration"
-require_path "$BACKUP_ROOT" "Dossier de sauvegarde"
+# require_path "$BACKUP_ROOT" "Dossier de sauvegarde"
 
 log "Démarrage de la mise à jour Pangolin (CLI)"
+
+# Définir BACKUP_ROOT automatiquement au dossier du docker-compose
+if [[ -z "$BACKUP_ROOT" ]]; then
+  BACKUP_ROOT="$(dirname \"$COMPOSE_PATH\")"
+fi
 
 backup_config "$CONFIG_DIR" "$BACKUP_ROOT"
 update_compose_file "$COMPOSE_PATH" "$PANGOLIN_VER" "$GERBIL_VER" "$TRAEFIK_VER"
