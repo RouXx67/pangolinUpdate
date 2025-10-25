@@ -21,16 +21,20 @@ Options:
   --down/--no-down           Exécuter (ou non) docker compose down (défaut: --down)
   --pull/--no-pull           Exécuter (ou non) docker compose pull (défaut: --pull)
   --up/--no-up               Exécuter (ou non) docker compose up -d (défaut: --up)
+  --auto-discover            Tenter de découvrir automatiquement les chemins (compose/config/traefik)
+  --search-root PATH         Racine de recherche pour --auto-discover (par défaut: racines communes)
   -y, --assume-yes           Ne pas poser de questions, utiliser les valeurs fournies
   -h, --help                 Afficher cette aide
 
 Exemples:
   ./update-pangolin-cli.sh \
-    --compose /opt/pangolin/docker-compose.yml \
-    --traefik-config /opt/pangolin/config/traefik/traefik_config.yml \
-    --config-dir /opt/pangolin/config \
-    --backup-root /opt/backups \
+    --compose /srv/pangolin/docker-compose.yml \
+    --traefik-config /srv/pangolin/config/traefik/traefik_config.yml \
+    --config-dir /srv/pangolin/config \
+    --backup-root /srv/backups \
     --pangolin-version 1.7.3 --gerbil-version 1.2.1 --traefik-version v3.4.0 --badger-version v1.2.0
+
+  ./update-pangolin-cli.sh --auto-discover --backup-root /srv/backups
 EOF
 }
 
@@ -68,6 +72,8 @@ DO_DOWN=true
 DO_PULL=true
 DO_UP=true
 ASSUME_YES=false
+AUTO_DISCOVER=false
+SEARCH_ROOT=""
 
 # Parse args
 while [[ $# -gt 0 ]]; do
@@ -86,6 +92,8 @@ while [[ $# -gt 0 ]]; do
     --no-pull) DO_PULL=false; shift;;
     --up) DO_UP=true; shift;;
     --no-up) DO_UP=false; shift;;
+    --auto-discover) AUTO_DISCOVER=true; shift;;
+    --search-root) SEARCH_ROOT="$2"; shift 2;;
     -y|--assume-yes) ASSUME_YES=true; shift;;
     -h|--help) usage; exit 0;;
     *) echo "Option inconnue: $1" >&2; usage; exit 1;;
@@ -113,6 +121,95 @@ require_path() {
   local p="$1"; local desc="$2"
   if [[ -z "$p" ]]; then
     echo "$desc non fourni." >&2; exit 1
+  fi
+}
+
+choose_from_list() {
+  # $1: name, $2..: items
+  local name="$1"; shift
+  local items=("$@")
+  if [[ ${#items[@]} -eq 0 ]]; then echo ""; return 0; fi
+  if [[ "$ASSUME_YES" == true ]]; then echo "${items[0]}"; return 0; fi
+  echo "Plusieurs candidats pour $name :"
+  local i=1
+  for it in "${items[@]}"; do
+    echo "  [$i] $it"
+    ((i++))
+  done
+  read -r -p "Choisissez [1-${#items[@]}] (défaut 1): " sel
+  if [[ -z "$sel" ]]; then sel=1; fi
+  if ! [[ "$sel" =~ ^[0-9]+$ ]] || [[ "$sel" -lt 1 ]] || [[ "$sel" -gt ${#items[@]} ]]; then sel=1; fi
+  echo "${items[$((sel-1))]}"
+}
+
+discover_paths() {
+  log "Auto-discovery des chemins en cours..."
+  local roots=()
+  if [[ -n "$SEARCH_ROOT" && -d "$SEARCH_ROOT" ]]; then
+    roots+=("$SEARCH_ROOT")
+  else
+    [[ -d "/srv" ]] && roots+=("/srv")
+    [[ -d "/opt" ]] && roots+=("/opt")
+    [[ -d "/var" ]] && roots+=("/var")
+    [[ -d "/etc" ]] && roots+=("/etc")
+    # Ajouter tous les /home/* existants
+    for h in /home/*; do [[ -d "$h" ]] && roots+=("$h"); done
+    [[ -d "/root" ]] && roots+=("/root")
+  fi
+
+  local compose_candidates=()
+  for r in "${roots[@]}"; do
+    log "Recherche de docker-compose dans: $r"
+    while IFS= read -r f; do compose_candidates+=("$f"); done < <(find "$r" -maxdepth 5 -type f \( -name 'docker-compose.yml' -o -name 'docker-compose.yaml' -o -name 'compose.yml' -o -name 'compose.yaml' \) 2>/dev/null)
+  done
+
+  # Prioriser ceux mentionnant fosrl/pangolin
+  local prioritized=() others=()
+  for f in "${compose_candidates[@]}"; do
+    if grep -q "fosrl/pangolin" "$f" 2>/dev/null; then prioritized+=("$f"); else others+=("$f"); fi
+  done
+  local ordered=()
+  ordered=("${prioritized[@]}" "${others[@]}")
+
+  if [[ -z "$COMPOSE_PATH" && ${#ordered[@]} -gt 0 ]]; then
+    COMPOSE_PATH=$(choose_from_list "docker-compose.yml" "${ordered[@]}")
+    log "Sélection docker-compose.yml: $COMPOSE_PATH"
+  fi
+
+  # Traefik config: essayer relative à COMPOSE_PATH
+  local base=""; [[ -n "$COMPOSE_PATH" ]] && base="$(dirname "$COMPOSE_PATH")"
+  if [[ -z "$TRAEFIK_CONFIG_PATH" && -n "$base" ]]; then
+    local rel="$base/config/traefik/traefik_config.yml"
+    if [[ -f "$rel" ]]; then
+      TRAEFIK_CONFIG_PATH="$rel"
+      log "Traefik config détecté: $TRAEFIK_CONFIG_PATH"
+    fi
+  fi
+  if [[ -z "$TRAEFIK_CONFIG_PATH" ]]; then
+    local traefik_candidates=()
+    for r in "${roots[@]}"; do
+      while IFS= read -r f; do traefik_candidates+=("$f"); done < <(find "$r" -maxdepth 5 -type f -name 'traefik_config.yml' 2>/dev/null)
+    done
+    if [[ ${#traefik_candidates[@]} -gt 0 ]]; then
+      TRAEFIK_CONFIG_PATH=$(choose_from_list "traefik_config.yml" "${traefik_candidates[@]}")
+      log "Sélection traefik_config.yml: $TRAEFIK_CONFIG_PATH"
+    fi
+  fi
+
+  # Config dir: essayer base/config
+  if [[ -z "$CONFIG_DIR" && -n "$base" && -d "$base/config" ]]; then
+    CONFIG_DIR="$base/config"
+    log "Dossier config détecté: $CONFIG_DIR"
+  fi
+  if [[ -z "$CONFIG_DIR" ]]; then
+    local config_candidates=()
+    for r in "${roots[@]}"; do
+      while IFS= read -r d; do config_candidates+=("$d"); done < <(find "$r" -maxdepth 4 -type d -name 'config' 2>/dev/null)
+    done
+    if [[ ${#config_candidates[@]} -gt 0 ]]; then
+      CONFIG_DIR=$(choose_from_list "dossier config" "${config_candidates[@]}")
+      log "Sélection dossier config: $CONFIG_DIR"
+    fi
   fi
 }
 
@@ -166,6 +263,11 @@ compose_run() {
   dir="$(dirname "$file")"
   (cd "$dir" && ${DOCKER_COMPOSE_BIN} "$@")
 }
+
+# Auto-discovery si demandé
+if [[ "$AUTO_DISCOVER" == true ]]; then
+  discover_paths
+fi
 
 # Renseigner les valeurs manquantes
 prompt_if_empty COMPOSE_PATH "Chemin docker-compose.yml: "
