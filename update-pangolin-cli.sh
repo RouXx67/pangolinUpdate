@@ -306,17 +306,21 @@ fi
 
 # Renseigner les valeurs manquantes
 prompt_if_empty COMPOSE_PATH "Chemin docker-compose.yml: "
-prompt_if_empty TRAEFIK_CONFIG_PATH "Chemin traefik_config.yml: "
+# Ne demander traefik_config.yml que si BADGER_VER est fourni
+if [[ -n "$BADGER_VER" ]]; then
+  prompt_if_empty TRAEFIK_CONFIG_PATH "Chemin traefik_config.yml (pour Badger): "
+fi
 prompt_if_empty CONFIG_DIR "Dossier de configuration à sauvegarder: "
 prompt_if_empty BACKUP_ROOT "Dossier de destination pour la sauvegarde: "
 prompt_if_empty PANGOLIN_VER "Version Pangolin (ex: 1.7.3): "
 prompt_if_empty GERBIL_VER "Version Gerbil (ex: 1.2.1): "
 prompt_if_empty TRAEFIK_VER "Version Traefik (ex: v3.4.0): "
-prompt_if_empty BADGER_VER "Version Badger (ex: v1.2.0): "
+# prompt_if_empty BADGER_VER "Version Badger (ex: v1.2.0): "
 
 # Validation
 require_path "$COMPOSE_PATH" "docker-compose.yml"
-require_path "$TRAEFIK_CONFIG_PATH" "traefik_config.yml"
+# TRAEFIK_CONFIG_PATH optionnel: seulement si BADGER_VER fourni
+# if [[ -n "$BADGER_VER" ]]; then require_path "$TRAEFIK_CONFIG_PATH" "traefik_config.yml"; fi
 require_path "$CONFIG_DIR" "Dossier de configuration"
 require_path "$BACKUP_ROOT" "Dossier de sauvegarde"
 
@@ -324,7 +328,12 @@ log "Démarrage de la mise à jour Pangolin (CLI)"
 
 backup_config "$CONFIG_DIR" "$BACKUP_ROOT"
 update_compose_file "$COMPOSE_PATH" "$PANGOLIN_VER" "$GERBIL_VER" "$TRAEFIK_VER"
-update_badger_version "$TRAEFIK_CONFIG_PATH" "$BADGER_VER"
+# Mise à jour de Badger facultative
+if [[ -n "$BADGER_VER" && -n "$TRAEFIK_CONFIG_PATH" && -f "$TRAEFIK_CONFIG_PATH" ]]; then
+  update_badger_version "$TRAEFIK_CONFIG_PATH" "$BADGER_VER"
+else
+  log "Mise à jour Badger ignorée (traefik_config.yml introuvable ou BADGER_VER non spécifié)"
+fi
 
 if [[ "$DO_DOWN" == true ]]; then
   log "Arrêt du stack (compose down)"; compose_run "$COMPOSE_PATH" down || true

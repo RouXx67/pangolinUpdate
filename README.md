@@ -11,7 +11,7 @@ Référence officielle:
 ## Prérequis
 - Docker installé et en fonctionnement
 - Docker Compose v2 (`docker compose`) ou v1 (`docker-compose`)
-- Accès aux fichiers: `docker-compose.yml`, `traefik_config.yml`, et le dossier de configuration de Pangolin
+- Accès aux fichiers: `docker-compose.yml`, et le dossier de configuration de Pangolin (le fichier `traefik_config.yml` est nécessaire uniquement si vous mettez à jour Badger)
 - Droits suffisants pour arrêter/démarrer les services Docker
 
 ## Installation
@@ -57,15 +57,29 @@ sudo /opt/pangolin/update-pangolin-cli.sh --auto-discover --backup-root /srv/bac
 Le script peut automatiquement rechercher vos fichiers Pangolin sur le système :
 
 ```bash
-# Auto-découverte complète
-./update-pangolin-cli.sh --auto-discover --backup-root /srv/backups
+# Auto-découverte complète (sans mise à jour Badger)
+./update-pangolin-cli.sh --auto-discover --backup-root /srv/backups \
+  --pangolin-version 1.7.3 --gerbil-version 1.2.1 --traefik-version v3.4.0
 
 # Auto-découverte dans un dossier spécifique
 ./update-pangolin-cli.sh --auto-discover --search-root /srv/pangolin --backup-root /srv/backups
 
 # Mode non-interactif (prend automatiquement le premier résultat trouvé)
 ./update-pangolin-cli.sh --auto-discover -y --backup-root /srv/backups \
-  --pangolin-version 1.7.3 --gerbil-version 1.2.1 --traefik-version v3.4.0 --badger-version v1.2.0
+  --pangolin-version 1.7.3 --gerbil-version 1.2.1 --traefik-version v3.4.0
+```
+
+#### Scénarios d’utilisation: avec ou sans mise à jour Badger
+- Sans mise à jour Badger (traefik_config.yml optionnel, ignoré si absent):
+```bash
+./update-pangolin-cli.sh --auto-discover --backup-root /srv/backups \
+  --pangolin-version 1.7.3 --gerbil-version 1.2.1 --traefik-version v3.4.0
+```
+- Avec mise à jour Badger (nécessite le chemin vers traefik_config.yml):
+```bash
+./update-pangolin-cli.sh --auto-discover --backup-root /srv/backups \
+  --pangolin-version 1.7.3 --gerbil-version 1.2.1 --traefik-version v3.4.0 \
+  --badger-version v1.2.0 --traefik-config /srv/pangolin/config/traefik/traefik_config.yml
 ```
 
 ### Configuration manuelle
@@ -86,7 +100,7 @@ Si vous omettez des options, le script vous les demandera en ligne de commande (
 
 ### Options disponibles
 - `--compose PATH`             Chemin vers `docker-compose.yml`
-- `--traefik-config PATH`      Chemin vers `traefik_config.yml`
+- `--traefik-config PATH`      Chemin vers `traefik_config.yml` (optionnel; requis uniquement avec `--badger-version`)
 - `--config-dir PATH`          Dossier de configuration à sauvegarder
 - `--backup-root PATH`         Dossier de destination pour la sauvegarde
 - `--pangolin-version VER`     Version d'image Pangolin (ex: `1.7.3`)
@@ -107,7 +121,7 @@ Si vous omettez des options, le script vous les demandera en ligne de commande (
 Le script recherche automatiquement :
 1. **docker-compose.yml** : dans `/srv`, `/opt`, `/var`, `/etc`, `/home/*`, `/root` (jusqu'à 5 niveaux de profondeur)
    - Priorise les fichiers contenant `fosrl/pangolin`
-2. **traefik_config.yml** : d'abord relativement au docker-compose trouvé (`base/config/traefik/traefik_config.yml`), puis recherche globale
+2. **traefik_config.yml** : d'abord relativement au docker-compose trouvé (`base/config/traefik/traefik_config.yml`), puis recherche globale (utilisé uniquement si vous fournissez `--badger-version`)
 3. **Dossier config** : d'abord relativement au docker-compose trouvé (`base/config`), puis recherche globale
 
 Si plusieurs candidats sont trouvés, le script propose une sélection interactive (sauf avec `--assume-yes` qui prend automatiquement le premier).
@@ -126,7 +140,8 @@ Pour plus d'informations et recommandations détaillées, consultez la documenta
 ## Dépannage
 - `docker compose` introuvable: installez Docker Compose v2 ou utilisez `docker-compose` v1.
 - Droits insuffisants: exécutez le script avec un utilisateur ayant accès à Docker (et `sudo` pour l'installation dans un dossier protégé comme `/opt`).
-- Chemins invalides: assurez-vous que `docker-compose.yml`, `traefik_config.yml` et le dossier de configuration existent et sont accessibles.
+- Chemins invalides: assurez-vous que `docker-compose.yml` et le dossier de configuration existent; `traefik_config.yml` n'est requis que si vous mettez à jour Badger.
+- Mise à jour Badger ignorée: si `--badger-version` est fourni mais `traefik_config.yml` est introuvable, le script journalise l'ignorance et poursuit les autres opérations.
 - Auto-découverte ne trouve rien: utilisez `--search-root` pour spécifier le dossier racine où chercher, ou spécifiez les chemins manuellement.
 
 ## Licence
