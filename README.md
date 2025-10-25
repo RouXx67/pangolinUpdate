@@ -15,6 +15,14 @@ Référence officielle:
 - Droits suffisants pour arrêter/démarrer les services Docker
 
 ## Installation
+
+Option A — Installation rapide avec wget:
+```bash
+wget -O /opt/pangolin/update-pangolin-cli.sh https://raw.githubusercontent.com/RouXx67/pangolinUpdate/main/update-pangolin-cli.sh
+chmod +x /opt/pangolin/update-pangolin-cli.sh
+```
+
+Option B — Copie manuelle:
 1. Copier le script sur votre serveur (ex: `/opt/pangolin/update-pangolin-cli.sh`).
 2. Rendre le script exécutable:
    ```bash
