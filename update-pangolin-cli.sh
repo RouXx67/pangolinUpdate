@@ -116,8 +116,8 @@ while [[ $# -gt 0 ]]; do
     --no-down)           DO_DOWN=false;            shift;;
     --pull)              DO_PULL=true;             shift;;
     --no-pull)           DO_PULL=false;            shift;;
-    --up)                DO_UP=true;              shift;;
-    --no-up)             DO_UP=false;             shift;;
+    --up)                DO_UP=true;               shift;;
+    --no-up)             DO_UP=false;              shift;;
     --auto-discover)     AUTO_DISCOVER=true;       shift;;
     --search-root)       SEARCH_ROOT="$2";         shift 2;;
     --self-install)      SELF_INSTALL=true;        shift;;
@@ -131,13 +131,15 @@ done
 # ============================================================
 # LOGGING
 # ============================================================
-stamp() { date '+%Y-%m-%d %H:%M:%S'; }
+stamp()   { date '+%Y-%m-%d %H:%M:%S'; }
 log()     { echo -e "$(stamp) ${GREEN}[INFO]${RESET}  $*"; }
 warn()    { echo -e "$(stamp) ${YELLOW}[WARN]${RESET}  $*"; }
 error()   { echo -e "$(stamp) ${RED}[ERROR]${RESET} $*" >&2; }
-section() { echo -e "\n${BOLD}${BLUE}══════════════════════════════${RESET}"; \
-            echo -e "${BOLD}${BLUE}  $*${RESET}"; \
-            echo -e "${BOLD}${BLUE}══════════════════════════════${RESET}\n"; }
+section() {
+  echo -e "\n${BOLD}${BLUE}══════════════════════════════${RESET}"
+  echo -e "${BOLD}${BLUE}  $*${RESET}"
+  echo -e "${BOLD}${BLUE}══════════════════════════════${RESET}\n"
+}
 
 LOGFILE="/tmp/pangolin_update_$(date '+%Y%m%d_%H%M%S').log"
 exec > >(tee -a "$LOGFILE") 2>&1
@@ -243,7 +245,6 @@ discover_paths() {
     [[ -d "/root" ]] && roots+=("/root")
   fi
 
-  # Chercher docker-compose
   local compose_candidates=()
   for r in "${roots[@]}"; do
     while IFS= read -r f; do
@@ -254,7 +255,6 @@ discover_paths() {
       2>/dev/null)
   done
 
-  # Prioriser ceux contenant fosrl/pangolin
   local prioritized=() others=()
   for f in "${compose_candidates[@]}"; do
     if grep -q "fosrl/pangolin" "$f" 2>/dev/null; then
@@ -270,11 +270,9 @@ discover_paths() {
     log "docker-compose.yml sélectionné: $COMPOSE_PATH"
   fi
 
-  # Déduire base dir
   local base=""
   [[ -n "$COMPOSE_PATH" ]] && base="$(dirname "$COMPOSE_PATH")"
 
-  # Chercher traefik_config.yml
   if [[ -z "$TRAEFIK_CONFIG_PATH" && -n "$base" ]]; then
     local rel="$base/config/traefik/traefik_config.yml"
     if [[ -f "$rel" ]]; then
@@ -295,7 +293,6 @@ discover_paths() {
     fi
   fi
 
-  # Chercher dossier config
   if [[ -z "$CONFIG_DIR" && -n "$base" && -d "$base/config" ]]; then
     CONFIG_DIR="$base/config"
     log "Dossier config détecté: $CONFIG_DIR"
@@ -327,7 +324,6 @@ backup_config() {
   log "Sauvegarde: $src → $dest"
   cp -a "$src" "$dest"
 
-  # Rotation: garder les 5 dernières sauvegardes
   local old_backups
   mapfile -t old_backups < <(find "$dst_root" -maxdepth 1 -type d -name 'config_backup_*' | sort | head -n -5)
   for old in "${old_backups[@]}"; do
@@ -343,19 +339,51 @@ backup_config() {
 # ============================================================
 update_compose_file() {
   local path="$1" pang="$2" gerb="$3" traef="$4"
+
   # Backup avant modif
   cp "$path" "${path}.bak"
   log "Backup compose: ${path}.bak"
+
+  # Afficher les lignes image AVANT modification (debug)
+  log "Images AVANT modification:"
+  grep -n "image:" "$path" | while IFS= read -r line; do
+    log "  $line"
+  done
+
+  # sed robuste: guillemets optionnels, espaces variables, avec ou sans registry prefix
+  # Pangolin
   sed -E -i \
-    "s|(^[[:space:]]*image:[[:space:]]*)fosrl/pangolin:[^[:space:]]+|\1fosrl/pangolin:${pang}|" \
+    "s|^([[:space:]]*image:[[:space:]]*[\"']?)[^\"'[:space:]]*fosrl/pangolin:[^\"'[:space:]]+([\"']?.*)|\1fosrl/pangolin:${pang}\2|" \
     "$path"
+
+  # Gerbil
   sed -E -i \
-    "s|(^[[:space:]]*image:[[:space:]]*)fosrl/gerbil:[^[:space:]]+|\1fosrl/gerbil:${gerb}|" \
+    "s|^([[:space:]]*image:[[:space:]]*[\"']?)[^\"'[:space:]]*fosrl/gerbil:[^\"'[:space:]]+([\"']?.*)|\1fosrl/gerbil:${gerb}\2|" \
     "$path"
+
+  # Traefik (attention: ne pas matcher fosrl/... qui contient aussi ":")
   sed -E -i \
-    "s|(^[[:space:]]*image:[[:space:]]*)traefik:[^[:space:]]+|\1traefik:${traef}|" \
+    "s|^([[:space:]]*image:[[:space:]]*[\"']?)[^\"'[:space:]]*traefik:[^\"'[:space:]fosrl]+([\"']?.*)|\1traefik:${traef}\2|" \
     "$path"
-  log "docker-compose.yml mis à jour."
+
+  # Afficher les lignes image APRÈS modification (vérification)
+  log "Images APRÈS modification:"
+  grep -n "image:" "$path" | while IFS= read -r line; do
+    log "  $line"
+  done
+
+  # Alerte si aucune différence détectée
+  if diff -q "$path" "${path}.bak" >/dev/null 2>&1; then
+    warn "⚠️  Aucune modification détectée dans docker-compose.yml !"
+    warn "Format des lignes 'image:' non reconnu. Contenu du fichier:"
+    grep -n "image:" "${path}.bak" | while IFS= read -r line; do
+      warn "  >>> $line <<<"
+    done
+    error "Mise à jour abandonnée. Vérifiez le format de votre docker-compose.yml."
+    exit 1
+  fi
+
+  log "docker-compose.yml mis à jour avec succès."
 }
 
 update_badger_version() {
@@ -421,14 +449,12 @@ fi
 
 section "Configuration"
 
-# Demander les valeurs manquantes
 prompt_if_empty COMPOSE_PATH "Chemin docker-compose.yml: "
 if [[ -n "$BADGER_VER" ]]; then
   prompt_if_empty TRAEFIK_CONFIG_PATH "Chemin traefik_config.yml (pour Badger): "
 fi
 prompt_if_empty CONFIG_DIR "Dossier de configuration à sauvegarder: "
 
-# Récupérer les dernières versions depuis Docker Hub
 log "Récupération des dernières versions disponibles..."
 DEFAULT_PANGOLIN_VER="$(get_latest_pangolin)"
 DEFAULT_GERBIL_VER="$(get_latest_gerbil)"
@@ -441,11 +467,9 @@ prompt_with_default PANGOLIN_VER "Version Pangolin" "$DEFAULT_PANGOLIN_VER"
 prompt_with_default GERBIL_VER   "Version Gerbil"   "$DEFAULT_GERBIL_VER"
 prompt_with_default TRAEFIK_VER  "Version Traefik"  "$DEFAULT_TRAEFIK_VER"
 
-# Validation
 require_path "$COMPOSE_PATH" "docker-compose.yml"
 require_path "$CONFIG_DIR"   "Dossier de configuration"
 
-# BACKUP_ROOT = dossier du docker-compose si non fourni
 if [[ -z "$BACKUP_ROOT" ]]; then
   BACKUP_ROOT="$(dirname "$COMPOSE_PATH")"
 fi
